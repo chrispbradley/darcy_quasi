@@ -1,74 +1,16 @@
-!> \file
-!> \author Christian Michler
-!> \brief This is an example program to solve a Darcy equation using OpenCMISS calls.
-!>
-!> \section LICENSE
-!>
-!> Version: MPL 1.1/GPL 2.0/LGPL 2.1
-!>
-!> The contents of this file are subject to the Mozilla Public License
-!> Version 1.1 (the "License"); you may not use this file except in
-!> compliance with the License. You may obtain a copy of the License at
-!> http://www.mozilla.org/MPL/
-!>
-!> Software distributed under the License is distributed on an "AS IS"
-!> basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
-!> License for the specific language governing rights and limitations
-!> under the License.
-!>
-!> The Original Code is OpenCMISS
-!>
-!> The Initial Developer of the Original Code is University of Auckland,
-!> Auckland, New Zealand and University of Oxford, Oxford, United
-!> Kingdom. Portions created by the University of Auckland and University
-!> of Oxford are Copyright (C) 2007 by the University of Auckland and
-!> the University of Oxford. All Rights Reserved.
-!>
-!> Contributor(s):
-!>
-!> Alternatively, the contents of this file may be used under the terms of
-!> either the GNU General Public License Version 2 or later (the "GPL"), or
-!> the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
-!> in which case the provisions of the GPL or the LGPL are applicable instead
-!> of those above. If you wish to allow use of your version of this file only
-!> under the terms of either the GPL or the LGPL, and not to allow others to
-!> use your version of this file under the terms of the MPL, indicate your
-!> decision by deleting the provisions above and replace them with the notice
-!> and other provisions required by the GPL or the LGPL. If you do not delete
-!> the provisions above, a recipient may use your version of this file under
-!> the terms of any one of the MPL, the GPL or the LGPL.
-!>
-
-!> \example FluidMechanics/Darcy/QuasistaticMaterial/src/QuasistaticMaterialExample.f90
-!! Example program to solve a QuasistaticMaterial ALE Darcy equation using OpenCMISS calls.
-!!
-!! !! \htmlinclude FluidMechanics/Darcy/QuasistaticMaterial/history.html
-!<
-
-! ! 
-! !  This example considers a moving mesh, time-dependent boundary conditions and
-! !  mesh-deformation dependent material properties and, thus, we solve it as a quasi-static ALE Darcy problem.
-! ! 
-
-!> Main program
-
 PROGRAM DARCYQUASISTATICMATERIALEXAMPLE
-
-  !
-  !================================================================================================================================
-  !
 
   !PROGRAM LIBRARIES
 
   USE OpenCMISS
   USE OpenCMISS_Iron
-  USE FLUID_MECHANICS_IO_ROUTINES
+
 #ifndef NOMPIMOD
   USE MPI
 #endif
-
-#ifdef WIN32
-  USE IFQWINCMISS
+  IMPLICIT NONE
+#ifdef NOMPIMOD
+#include "mpif.h"
 #endif
 
   !
@@ -77,12 +19,9 @@ PROGRAM DARCYQUASISTATICMATERIALEXAMPLE
 
   !PROGRAM VARIABLES AND TYPES
 
-  IMPLICIT NONE
-
-#ifdef NOMPIMOD
-#include "mpif.h"
-#endif
-
+  REAL(CMISSRP), PARAMETER :: HEIGHT=1.0_CMISSRP
+  REAL(CMISSRP), PARAMETER :: WIDTH=1.0_CMISSRP
+  REAL(CMISSRP), PARAMETER :: LENGTH=1.0_CMISSRP
 
   !Test program parameters
 
@@ -102,6 +41,7 @@ PROGRAM DARCYQUASISTATICMATERIALEXAMPLE
   INTEGER(CMISSIntg), PARAMETER :: ProblemUserNumber=14
   INTEGER(CMISSIntg), PARAMETER :: EquationsSetFieldUserNumberDarcy=21
   INTEGER(CMISSIntg), PARAMETER :: EquationsSetFieldUserNumberMatProperties=22
+  INTEGER(CMISSIntg), PARAMETER :: GeneratedMeshUserNumber=15
 
   INTEGER(CMISSIntg), PARAMETER :: SolverMatPropertiesUserNumber=1
   INTEGER(CMISSIntg), PARAMETER :: SolverDarcyUserNumber=2
@@ -110,14 +50,10 @@ PROGRAM DARCYQUASISTATICMATERIALEXAMPLE
   INTEGER(CMISSIntg), PARAMETER :: MaterialsFieldUserNumberMatPropertiesPorosity=1
   INTEGER(CMISSIntg), PARAMETER :: MaterialsFieldUserNumberMatPropertiesPermOverVis=2
 
-  !Program types
-
-  TYPE(EXPORT_CONTAINER):: CM
-
   !Program variables
 
   INTEGER(CMISSIntg) :: NUMBER_OF_DIMENSIONS
-  
+  INTEGER(CMISSIntg) :: NUMBER_GLOBAL_X_ELEMENTS,NUMBER_GLOBAL_Y_ELEMENTS,NUMBER_GLOBAL_Z_ELEMENTS
   INTEGER(CMISSIntg) :: BASIS_TYPE
   INTEGER(CMISSIntg) :: BASIS_NUMBER_GEOMETRY
   INTEGER(CMISSIntg) :: BASIS_NUMBER_VELOCITY
@@ -198,6 +134,7 @@ PROGRAM DARCYQUASISTATICMATERIALEXAMPLE
   TYPE(cmfe_MeshElementsType) :: MeshElementsPressure
   !Meshes
   TYPE(cmfe_MeshType) :: Mesh
+  TYPE(cmfe_GeneratedMeshType) :: GeneratedMesh
   !Decompositions
   TYPE(cmfe_DecompositionType) :: Decomposition
   !Fields
@@ -209,12 +146,12 @@ PROGRAM DARCYQUASISTATICMATERIALEXAMPLE
   TYPE(cmfe_FieldType) :: MaterialsFieldDarcy
   TYPE(cmfe_FieldType) :: MaterialsFieldMatProperties
   TYPE(cmfe_FieldType) :: EquationsSetFieldDarcy
-  TYPE(cmfe_FieldType) :: EquationsSetFieldMatProperties  
+  TYPE(cmfe_FieldType) :: EquationsSetFieldMatProperties
 !   TYPE(cmfe_FieldType) :: IndependentFieldDarcy
 !   TYPE(cmfe_FieldType) :: IndependentFieldMatProperties
   !Boundary conditions
   TYPE(cmfe_BoundaryConditionsType) :: BoundaryConditionsDarcy
-  TYPE(cmfe_BoundaryConditionsType) :: BoundaryConditionsMatProperties 
+  TYPE(cmfe_BoundaryConditionsType) :: BoundaryConditionsMatProperties
   !Equations sets
   TYPE(cmfe_EquationsSetType) :: EquationsSetDarcy
   TYPE(cmfe_EquationsSetType) :: EquationsSetMatProperties
@@ -234,32 +171,14 @@ PROGRAM DARCYQUASISTATICMATERIALEXAMPLE
   !Computational information
   INTEGER(CMISSIntg) :: NumberOfComputationalNodes,ComputationalNodeNumber,NodeDomain
 
-#ifdef WIN32
-  !Quickwin type
-  LOGICAL :: QUICKWIN_STATUS=.FALSE.
-  TYPE(WINDOWCONFIG) :: QUICKWIN_WINDOW_CONFIG
-#endif
-  
   !Generic CMISS variables
-  
+
   INTEGER(CMISSIntg) :: EquationsSetIndex
   INTEGER(CMISSIntg) :: Err
 
 
   INTEGER(CMISSIntg) :: DIAG_LEVEL_LIST(5)
   CHARACTER(LEN=255) :: DIAG_ROUTINE_LIST(6) !,TIMING_ROUTINE_LIST(1)
-
-  
-#ifdef WIN32
-  !Initialise QuickWin
-  QUICKWIN_WINDOW_CONFIG%TITLE="General Output" !Window title
-  QUICKWIN_WINDOW_CONFIG%NUMTEXTROWS=-1 !Max possible number of rows
-  QUICKWIN_WINDOW_CONFIG%MODE=QWIN$SCROLLDOWN
-  !Set the window parameters
-  QUICKWIN_STATUS=SETWINDOWCONFIG(QUICKWIN_WINDOW_CONFIG)
-  !If attempt fails set with system estimated values
-  IF(.NOT.QUICKWIN_STATUS) QUICKWIN_STATUS=SETWINDOWCONFIG(QUICKWIN_WINDOW_CONFIG)
-#endif
 
   !
   !================================================================================================================================
@@ -268,9 +187,7 @@ PROGRAM DARCYQUASISTATICMATERIALEXAMPLE
   !INITIALISE OPENCMISS
 
   CALL cmfe_Initialise(WorldCoordinateSystem,WorldRegion,Err)
-
   CALL cmfe_ErrorHandlingModeSet(CMFE_ERRORS_TRAP_ERROR,Err)
-
   !Get the computational nodes information
   CALL cmfe_ComputationalNumberOfNodesGet(NumberOfComputationalNodes,Err)
   CALL cmfe_ComputationalNodeNumberGet(ComputationalNodeNumber,Err)
@@ -280,25 +197,17 @@ PROGRAM DARCYQUASISTATICMATERIALEXAMPLE
   !
 
   !PROBLEM CONTROL PANEL
-
-  !Import cmHeart mesh information
-  CALL FLUID_MECHANICS_IO_READ_CMHEART(CM,Err)  
-  BASIS_NUMBER_GEOMETRY=CM%ID_M
-  BASIS_NUMBER_VELOCITY=CM%ID_V
-  BASIS_NUMBER_PRESSURE=CM%ID_P
-  NUMBER_OF_DIMENSIONS=CM%D
-  BASIS_TYPE=CM%IT_T
-  BASIS_XI_INTERPOLATION_GEOMETRY=CM%IT_M
-  BASIS_XI_INTERPOLATION_VELOCITY=CM%IT_V
-  BASIS_XI_INTERPOLATION_PRESSURE=CM%IT_P
-  NUMBER_OF_NODES_GEOMETRY=CM%N_M
-  NUMBER_OF_NODES_VELOCITY=CM%N_V
-  NUMBER_OF_NODES_PRESSURE=CM%N_P
-  TOTAL_NUMBER_OF_NODES=CM%N_T
-  TOTAL_NUMBER_OF_ELEMENTS=CM%E_T
-  NUMBER_OF_ELEMENT_NODES_GEOMETRY=CM%EN_M
-  NUMBER_OF_ELEMENT_NODES_VELOCITY=CM%EN_V
-  NUMBER_OF_ELEMENT_NODES_PRESSURE=CM%EN_P
+  NUMBER_GLOBAL_X_ELEMENTS=1
+  NUMBER_GLOBAL_Y_ELEMENTS=3
+  NUMBER_GLOBAL_Z_ELEMENTS=1
+  NUMBER_OF_DIMENSIONS=3
+  BASIS_TYPE=CMFE_BASIS_LINEAR_LAGRANGE_INTERPOLATION
+  BASIS_XI_INTERPOLATION_GEOMETRY=CMFE_BASIS_LINEAR_LAGRANGE_INTERPOLATION
+  BASIS_XI_INTERPOLATION_VELOCITY=CMFE_BASIS_LINEAR_LAGRANGE_INTERPOLATION
+  BASIS_XI_INTERPOLATION_PRESSURE=CMFE_BASIS_LINEAR_LAGRANGE_INTERPOLATION
+  MESH_COMPONENT_NUMBER_GEOMETRY=1
+  MESH_COMPONENT_NUMBER_VELOCITY=1
+  MESH_COMPONENT_NUMBER_PRESSURE=1
   !Set domain dimensions
   DOMAIN_X1 = -5.0_CMISSRP
   DOMAIN_X2 =  5.0_CMISSRP
@@ -346,7 +255,6 @@ PROGRAM DARCYQUASISTATICMATERIALEXAMPLE
   MAXIMUM_ITERATIONS=10000_CMISSIntg !default: 100000
   RESTART_VALUE=3000_CMISSIntg !default: 30
   LINESEARCH_ALPHA=1.0_CMISSRP
-
 
   !
   !================================================================================================================================
@@ -421,8 +329,8 @@ PROGRAM DARCYQUASISTATICMATERIALEXAMPLE
     CALL cmfe_Basis_InterpolationXiSet(BasisGeometry,[BASIS_XI_INTERPOLATION_GEOMETRY,BASIS_XI_INTERPOLATION_GEOMETRY],Err)
     CALL cmfe_Basis_QuadratureNumberOfGaussXiSet(BasisGeometry,[BASIS_XI_GAUSS_GEOMETRY,BASIS_XI_GAUSS_GEOMETRY],Err)
   ELSE IF(NUMBER_OF_DIMENSIONS==3) THEN
-    CALL cmfe_Basis_InterpolationXiSet(BasisGeometry,[BASIS_XI_INTERPOLATION_GEOMETRY,BASIS_XI_INTERPOLATION_GEOMETRY, & 
-      & BASIS_XI_INTERPOLATION_GEOMETRY],Err)                         
+    CALL cmfe_Basis_InterpolationXiSet(BasisGeometry,[BASIS_XI_INTERPOLATION_GEOMETRY,BASIS_XI_INTERPOLATION_GEOMETRY, &
+      & BASIS_XI_INTERPOLATION_GEOMETRY],Err)
     CALL cmfe_Basis_QuadratureNumberOfGaussXiSet(BasisGeometry,[BASIS_XI_GAUSS_GEOMETRY,BASIS_XI_GAUSS_GEOMETRY, &
       & BASIS_XI_GAUSS_GEOMETRY],Err)
   ENDIF
@@ -447,9 +355,9 @@ PROGRAM DARCYQUASISTATICMATERIALEXAMPLE
       CALL cmfe_Basis_InterpolationXiSet(BasisVelocity,[BASIS_XI_INTERPOLATION_VELOCITY,BASIS_XI_INTERPOLATION_VELOCITY],Err)
       CALL cmfe_Basis_QuadratureNumberOfGaussXiSet(BasisVelocity,[BASIS_XI_GAUSS_VELOCITY,BASIS_XI_GAUSS_VELOCITY],Err)
     ELSE IF(NUMBER_OF_DIMENSIONS==3) THEN
-      CALL cmfe_Basis_InterpolationXiSet(BasisVelocity,[BASIS_XI_INTERPOLATION_VELOCITY,BASIS_XI_INTERPOLATION_VELOCITY, & 
-        & BASIS_XI_INTERPOLATION_VELOCITY],Err)                         
-      CALL cmfe_Basis_QuadratureNumberOfGaussXiSet(BasisVelocity,[BASIS_XI_GAUSS_VELOCITY,BASIS_XI_GAUSS_VELOCITY, & 
+      CALL cmfe_Basis_InterpolationXiSet(BasisVelocity,[BASIS_XI_INTERPOLATION_VELOCITY,BASIS_XI_INTERPOLATION_VELOCITY, &
+        & BASIS_XI_INTERPOLATION_VELOCITY],Err)
+      CALL cmfe_Basis_QuadratureNumberOfGaussXiSet(BasisVelocity,[BASIS_XI_GAUSS_VELOCITY,BASIS_XI_GAUSS_VELOCITY, &
         & BASIS_XI_GAUSS_VELOCITY],Err)
     ENDIF
     !Finish the creation of the basis
@@ -476,9 +384,9 @@ PROGRAM DARCYQUASISTATICMATERIALEXAMPLE
       CALL cmfe_Basis_InterpolationXiSet(BasisPressure,[BASIS_XI_INTERPOLATION_PRESSURE,BASIS_XI_INTERPOLATION_PRESSURE],Err)
       CALL cmfe_Basis_QuadratureNumberOfGaussXiSet(BasisPressure,[BASIS_XI_GAUSS_PRESSURE,BASIS_XI_GAUSS_PRESSURE],Err)
     ELSE IF(NUMBER_OF_DIMENSIONS==3) THEN
-      CALL cmfe_Basis_InterpolationXiSet(BasisPressure,[BASIS_XI_INTERPOLATION_PRESSURE,BASIS_XI_INTERPOLATION_PRESSURE, & 
-        & BASIS_XI_INTERPOLATION_PRESSURE],Err)                         
-      CALL cmfe_Basis_QuadratureNumberOfGaussXiSet(BasisPressure,[BASIS_XI_GAUSS_PRESSURE,BASIS_XI_GAUSS_PRESSURE, & 
+      CALL cmfe_Basis_InterpolationXiSet(BasisPressure,[BASIS_XI_INTERPOLATION_PRESSURE,BASIS_XI_INTERPOLATION_PRESSURE, &
+        & BASIS_XI_INTERPOLATION_PRESSURE],Err)
+      CALL cmfe_Basis_QuadratureNumberOfGaussXiSet(BasisPressure,[BASIS_XI_GAUSS_PRESSURE,BASIS_XI_GAUSS_PRESSURE, &
         & BASIS_XI_GAUSS_PRESSURE],Err)
     ENDIF
     !Finish the creation of the basis
@@ -491,59 +399,25 @@ PROGRAM DARCYQUASISTATICMATERIALEXAMPLE
 
   !MESH
 
-  !Start the creation of mesh nodes
-  CALL cmfe_Nodes_Initialise(Nodes,Err)
-  CALL cmfe_Nodes_CreateStart(Region,TOTAL_NUMBER_OF_NODES,Nodes,Err)
-  CALL cmfe_Nodes_CreateFinish(Nodes,Err)
-  !Start the creation of the mesh
+  !Start the creation of a generated mesh in the region
+  CALL cmfe_GeneratedMesh_Initialise(GeneratedMesh,Err)
+  CALL cmfe_GeneratedMesh_CreateStart(GeneratedMeshUserNumber,Region,GeneratedMesh,Err)
+  !Set up a regular x*y*z mesh
+  CALL cmfe_GeneratedMesh_TypeSet(GeneratedMesh,CMFE_GENERATED_MESH_REGULAR_MESH_TYPE,Err)
+  !Set the default basis
+  CALL cmfe_GeneratedMesh_BasisSet(GeneratedMesh,BasisGeometry,Err)
+  !Define the mesh on the region
+  IF(NUMBER_GLOBAL_Z_ELEMENTS==0) THEN
+    CALL cmfe_GeneratedMesh_ExtentSet(GeneratedMesh,[WIDTH,HEIGHT],Err)
+    CALL cmfe_GeneratedMesh_NumberOfElementsSet(GeneratedMesh,[NUMBER_GLOBAL_X_ELEMENTS,NUMBER_GLOBAL_Y_ELEMENTS],Err)
+  ELSE
+    CALL cmfe_GeneratedMesh_ExtentSet(GeneratedMesh,[WIDTH,HEIGHT,LENGTH],Err)
+    CALL cmfe_GeneratedMesh_NumberOfElementsSet(GeneratedMesh,[NUMBER_GLOBAL_X_ELEMENTS,NUMBER_GLOBAL_Y_ELEMENTS, &
+      & NUMBER_GLOBAL_Z_ELEMENTS],Err)
+  ENDIF
+  !Finish the creation of a generated mesh in the region
   CALL cmfe_Mesh_Initialise(Mesh,Err)
-  CALL cmfe_Mesh_CreateStart(MeshUserNumber,Region,NUMBER_OF_DIMENSIONS,Mesh,Err)
-  !Set number of mesh elements
-  CALL cmfe_Mesh_NumberOfElementsSet(Mesh,TOTAL_NUMBER_OF_ELEMENTS,Err)
-  !Set number of mesh components
-  CALL cmfe_Mesh_NumberOfComponentsSet(Mesh,MESH_NUMBER_OF_COMPONENTS,Err)
-  !Specify spatial mesh component
-  CALL cmfe_MeshElements_Initialise(MeshElementsGeometry,Err)
-  CALL cmfe_MeshElements_Initialise(MeshElementsVelocity,Err)
-  CALL cmfe_MeshElements_Initialise(MeshElementsPressure,Err)
-  MESH_COMPONENT_NUMBER_GEOMETRY=1
-  MESH_COMPONENT_NUMBER_VELOCITY=1
-  MESH_COMPONENT_NUMBER_PRESSURE=1
-  CALL cmfe_MeshElements_CreateStart(Mesh,MESH_COMPONENT_NUMBER_GEOMETRY,BasisGeometry,MeshElementsGeometry,Err)
-  DO ELEMENT_NUMBER=1,TOTAL_NUMBER_OF_ELEMENTS
-    CALL cmfe_MeshElements_NodesSet(MeshElementsGeometry,ELEMENT_NUMBER,CM%M(ELEMENT_NUMBER,1:NUMBER_OF_ELEMENT_NODES_GEOMETRY),Err)
-  ENDDO
-  CALL cmfe_MeshElements_CreateFinish(MeshElementsGeometry,Err)
-  !Specify velocity mesh component
-  IF(BASIS_XI_INTERPOLATION_VELOCITY==BASIS_XI_INTERPOLATION_GEOMETRY) THEN
-    MeshElementsVelocity=MeshElementsGeometry
-  ELSE
-    MESH_COMPONENT_NUMBER_VELOCITY=MESH_COMPONENT_NUMBER_GEOMETRY+1
-    CALL cmfe_MeshElements_CreateStart(Mesh,MESH_COMPONENT_NUMBER_VELOCITY,BasisVelocity,MeshElementsVelocity,Err)
-    DO ELEMENT_NUMBER=1,TOTAL_NUMBER_OF_ELEMENTS
-      CALL cmfe_MeshElements_NodesSet(MeshElementsVelocity,ELEMENT_NUMBER,CM%V(ELEMENT_NUMBER, & 
-        & 1:NUMBER_OF_ELEMENT_NODES_VELOCITY),Err)
-    ENDDO
-    CALL cmfe_MeshElements_CreateFinish(MeshElementsVelocity,Err)
-  ENDIF
-  !Specify pressure mesh component
-  IF(BASIS_XI_INTERPOLATION_PRESSURE==BASIS_XI_INTERPOLATION_GEOMETRY) THEN
-    MeshElementsPressure=MeshElementsGeometry
-    MESH_COMPONENT_NUMBER_PRESSURE=MESH_COMPONENT_NUMBER_GEOMETRY
-  ELSE IF(BASIS_XI_INTERPOLATION_PRESSURE==BASIS_XI_INTERPOLATION_VELOCITY) THEN
-    MeshElementsPressure=MeshElementsVelocity
-    MESH_COMPONENT_NUMBER_PRESSURE=MESH_COMPONENT_NUMBER_VELOCITY
-  ELSE
-    MESH_COMPONENT_NUMBER_PRESSURE=MESH_COMPONENT_NUMBER_VELOCITY+1
-    CALL cmfe_MeshElements_CreateStart(Mesh,MESH_COMPONENT_NUMBER_PRESSURE,BasisPressure,MeshElementsPressure,Err)
-    DO ELEMENT_NUMBER=1,TOTAL_NUMBER_OF_ELEMENTS
-      CALL cmfe_MeshElements_NodesSet(MeshElementsPressure,ELEMENT_NUMBER,CM%P(ELEMENT_NUMBER, & 
-        & 1:NUMBER_OF_ELEMENT_NODES_PRESSURE),Err)
-    ENDDO
-    CALL cmfe_MeshElements_CreateFinish(MeshElementsPressure,Err)
-  ENDIF
-  !Finish the creation of the mesh
-  CALL cmfe_Mesh_CreateFinish(Mesh,Err)
+  CALL cmfe_GeneratedMesh_CreateFinish(GeneratedMesh,MeshUserNumber,Mesh,Err)
 
   !
   !================================================================================================================================
@@ -572,20 +446,20 @@ PROGRAM DARCYQUASISTATICMATERIALEXAMPLE
   !Set the mesh component to be used by the field components.
 
   DO COMPONENT_NUMBER=1,NUMBER_OF_DIMENSIONS
-    CALL cmfe_Field_ComponentMeshComponentSet(GeometricField,CMFE_FIELD_U_VARIABLE_TYPE,COMPONENT_NUMBER, & 
+    CALL cmfe_Field_ComponentMeshComponentSet(GeometricField,CMFE_FIELD_U_VARIABLE_TYPE,COMPONENT_NUMBER, &
       & MESH_COMPONENT_NUMBER_GEOMETRY,Err)
   ENDDO
 
   !Finish creating the field
   CALL cmfe_Field_CreateFinish(GeometricField,Err)
   !Update the geometric field parameters
-  DO NODE_NUMBER=1,NUMBER_OF_NODES_GEOMETRY
-    DO COMPONENT_NUMBER=1,NUMBER_OF_DIMENSIONS
-      VALUE=CM%N(NODE_NUMBER,COMPONENT_NUMBER)
-      CALL cmfe_Field_ParameterSetUpdateNode(GeometricField,CMFE_FIELD_U_VARIABLE_TYPE,CMFE_FIELD_VALUES_SET_TYPE,1, & 
-        & CMFE_NO_GLOBAL_DERIV,NODE_NUMBER,COMPONENT_NUMBER,VALUE,Err)
-    ENDDO
-  ENDDO
+!  DO NODE_NUMBER=1,NUMBER_OF_NODES_GEOMETRY
+!    DO COMPONENT_NUMBER=1,NUMBER_OF_DIMENSIONS
+!      VALUE=CM%N(NODE_NUMBER,COMPONENT_NUMBER)
+!      CALL cmfe_Field_ParameterSetUpdateNode(GeometricField,CMFE_FIELD_U_VARIABLE_TYPE,CMFE_FIELD_VALUES_SET_TYPE,1, &
+!        & CMFE_NO_GLOBAL_DERIV,NODE_NUMBER,COMPONENT_NUMBER,VALUE,Err)
+!    ENDDO
+!  ENDDO
   CALL cmfe_Field_ParameterSetUpdateStart(GeometricField,CMFE_FIELD_U_VARIABLE_TYPE,CMFE_FIELD_VALUES_SET_TYPE,Err)
   CALL cmfe_Field_ParameterSetUpdateFinish(GeometricField,CMFE_FIELD_U_VARIABLE_TYPE,CMFE_FIELD_VALUES_SET_TYPE,Err)
 
@@ -602,8 +476,6 @@ PROGRAM DARCYQUASISTATICMATERIALEXAMPLE
     & CMFE_EQUATIONS_SET_DARCY_EQUATION_TYPE,CMFE_EQUATIONS_SET_ALE_DARCY_SUBTYPE],EquationsSetFieldUserNumberDarcy, &
     & EquationsSetFieldDarcy,EquationsSetDarcy,Err)
   !Set the equations set to be a ALE Darcy problem
-!   CALL cmfe_EquationsSet_SpecificationSet(EquationsSetDarcy,CMFE_EQUATIONS_SET_FLUID_MECHANICS_CLASS, &
-!     & CMFE_EQUATIONS_SET_DARCY_EQUATION_TYPE,CMFE_EQUATIONS_SET_ALE_DARCY_SUBTYPE,Err)
   !Finish creating the equations set
   CALL cmfe_EquationsSet_CreateFinish(EquationsSetDarcy,Err)
 
@@ -611,11 +483,10 @@ PROGRAM DARCYQUASISTATICMATERIALEXAMPLE
   CALL cmfe_Field_Initialise(EquationsSetFieldMatProperties,Err)
   CALL cmfe_EquationsSet_Initialise(EquationsSetMatProperties,Err)
   CALL cmfe_EquationsSet_CreateStart(EquationsSetUserNumberMatProperties,Region,GeometricField,[CMFE_EQUATIONS_SET_FITTING_CLASS, &
-    & CMFE_EQUATIONS_SET_DATA_FITTING_EQUATION_TYPE,CMFE_EQUATIONS_SET_MAT_PROPERTIES_DATA_FITTING_SUBTYPE], &
-    & EquationsSetFieldUserNumberMatProperties,EquationsSetFieldMatProperties,EquationsSetMatProperties,Err)
+    & CMFE_EQUATIONS_SET_DATA_FITTING_EQUATION_TYPE,CMFE_EQUATIONS_SET_MAT_PROPERTIES_DATA_FITTING_SUBTYPE, &
+    & CMFE_EQUATIONS_SET_FITTING_NO_SMOOTHING],EquationsSetFieldUserNumberMatProperties,EquationsSetFieldMatProperties, &
+    & EquationsSetMatProperties,Err)
   !Set the equations set to be a deformation-dependent material properties problem
-!   CALL cmfe_EquationsSet_SpecificationSet(EquationsSetMatProperties,CMFE_EQUATIONS_SET_FITTING_CLASS, &
-!     & CMFE_EQUATIONS_SET_DATA_FITTING_EQUATION_TYPE,CMFE_EQUATIONS_SET_MAT_PROPERTIES_DATA_FITTING_SUBTYPE,Err)
   !Finish creating the equations set
   CALL cmfe_EquationsSet_CreateFinish(EquationsSetMatProperties,Err)
 
@@ -627,39 +498,39 @@ PROGRAM DARCYQUASISTATICMATERIALEXAMPLE
 
   !Create the equations set dependent field variables for ALE Darcy
   CALL cmfe_Field_Initialise(DependentFieldDarcy,Err)
-  CALL cmfe_EquationsSet_DependentCreateStart(EquationsSetDarcy,DependentFieldUserNumberDarcy, & 
+  CALL cmfe_EquationsSet_DependentCreateStart(EquationsSetDarcy,DependentFieldUserNumberDarcy, &
     & DependentFieldDarcy,Err)
   !Set the mesh component to be used by the field components.
   DO COMPONENT_NUMBER=1,NUMBER_OF_DIMENSIONS
-    CALL cmfe_Field_ComponentMeshComponentSet(DependentFieldDarcy,CMFE_FIELD_U_VARIABLE_TYPE,COMPONENT_NUMBER, & 
+    CALL cmfe_Field_ComponentMeshComponentSet(DependentFieldDarcy,CMFE_FIELD_U_VARIABLE_TYPE,COMPONENT_NUMBER, &
       & MESH_COMPONENT_NUMBER_VELOCITY,Err)
-    CALL cmfe_Field_ComponentMeshComponentSet(DependentFieldDarcy,CMFE_FIELD_DELUDELN_VARIABLE_TYPE,COMPONENT_NUMBER, & 
+    CALL cmfe_Field_ComponentMeshComponentSet(DependentFieldDarcy,CMFE_FIELD_DELUDELN_VARIABLE_TYPE,COMPONENT_NUMBER, &
       & MESH_COMPONENT_NUMBER_VELOCITY,Err)
   ENDDO
   COMPONENT_NUMBER=NUMBER_OF_DIMENSIONS+1
-    CALL cmfe_Field_ComponentMeshComponentSet(DependentFieldDarcy,CMFE_FIELD_U_VARIABLE_TYPE,COMPONENT_NUMBER, & 
+    CALL cmfe_Field_ComponentMeshComponentSet(DependentFieldDarcy,CMFE_FIELD_U_VARIABLE_TYPE,COMPONENT_NUMBER, &
       & MESH_COMPONENT_NUMBER_PRESSURE,Err)
-    CALL cmfe_Field_ComponentMeshComponentSet(DependentFieldDarcy,CMFE_FIELD_DELUDELN_VARIABLE_TYPE,COMPONENT_NUMBER, & 
+    CALL cmfe_Field_ComponentMeshComponentSet(DependentFieldDarcy,CMFE_FIELD_DELUDELN_VARIABLE_TYPE,COMPONENT_NUMBER, &
       & MESH_COMPONENT_NUMBER_PRESSURE,Err)
   !Finish the equations set dependent field variables
   CALL cmfe_EquationsSet_DependentCreateFinish(EquationsSetDarcy,Err)
 
   !Initialise dependent field (velocity components)
   DO COMPONENT_NUMBER=1,NUMBER_OF_DIMENSIONS
-    CALL cmfe_Field_ComponentValuesInitialise(DependentFieldDarcy,CMFE_FIELD_U_VARIABLE_TYPE,CMFE_FIELD_VALUES_SET_TYPE, & 
+    CALL cmfe_Field_ComponentValuesInitialise(DependentFieldDarcy,CMFE_FIELD_U_VARIABLE_TYPE,CMFE_FIELD_VALUES_SET_TYPE, &
       & COMPONENT_NUMBER,INITIAL_FIELD_DARCY(COMPONENT_NUMBER),Err)
   ENDDO
 
   !Create the equations set dependent field variables for deformation-dependent material properties
   CALL cmfe_Field_Initialise(DependentFieldMatProperties,Err)
-  CALL cmfe_EquationsSet_DependentCreateStart(EquationsSetMatProperties,DependentFieldUserNumberMatProperties, & 
+  CALL cmfe_EquationsSet_DependentCreateStart(EquationsSetMatProperties,DependentFieldUserNumberMatProperties, &
     & DependentFieldMatProperties,Err)
   !Set the mesh component to be used by the field components.
   NUMBER_OF_COMPONENTS_DEPENDENT_FIELD_MAT_PROPERTIES = 2
   DO COMPONENT_NUMBER=1,NUMBER_OF_COMPONENTS_DEPENDENT_FIELD_MAT_PROPERTIES
-    CALL cmfe_Field_ComponentMeshComponentSet(DependentFieldMatProperties,CMFE_FIELD_U_VARIABLE_TYPE,COMPONENT_NUMBER, & 
+    CALL cmfe_Field_ComponentMeshComponentSet(DependentFieldMatProperties,CMFE_FIELD_U_VARIABLE_TYPE,COMPONENT_NUMBER, &
       & MESH_COMPONENT_NUMBER_GEOMETRY,Err)
-    CALL cmfe_Field_ComponentMeshComponentSet(DependentFieldMatProperties,CMFE_FIELD_DELUDELN_VARIABLE_TYPE,COMPONENT_NUMBER, & 
+    CALL cmfe_Field_ComponentMeshComponentSet(DependentFieldMatProperties,CMFE_FIELD_DELUDELN_VARIABLE_TYPE,COMPONENT_NUMBER, &
       & MESH_COMPONENT_NUMBER_GEOMETRY,Err)
   ENDDO
   !Finish the equations set dependent field variables
@@ -667,7 +538,7 @@ PROGRAM DARCYQUASISTATICMATERIALEXAMPLE
 
   !Initialise dependent field
   DO COMPONENT_NUMBER=1,NUMBER_OF_COMPONENTS_DEPENDENT_FIELD_MAT_PROPERTIES
-    CALL cmfe_Field_ComponentValuesInitialise(DependentFieldMatProperties,CMFE_FIELD_U_VARIABLE_TYPE,CMFE_FIELD_VALUES_SET_TYPE, & 
+    CALL cmfe_Field_ComponentValuesInitialise(DependentFieldMatProperties,CMFE_FIELD_U_VARIABLE_TYPE,CMFE_FIELD_VALUES_SET_TYPE, &
       & COMPONENT_NUMBER,INITIAL_FIELD_MAT_PROPERTIES(COMPONENT_NUMBER),Err)
   ENDDO
 
@@ -679,23 +550,23 @@ PROGRAM DARCYQUASISTATICMATERIALEXAMPLE
 
   !Create the equations set materials field variables for ALE Darcy
   CALL cmfe_Field_Initialise(MaterialsFieldDarcy,Err)
-  CALL cmfe_EquationsSet_MaterialsCreateStart(EquationsSetDarcy,MaterialsFieldUserNumberDarcy, & 
+  CALL cmfe_EquationsSet_MaterialsCreateStart(EquationsSetDarcy,MaterialsFieldUserNumberDarcy, &
     & MaterialsFieldDarcy,Err)
   !Finish the equations set materials field variables
   CALL cmfe_EquationsSet_MaterialsCreateFinish(EquationsSetDarcy,Err)
-  CALL cmfe_Field_ComponentValuesInitialise(MaterialsFieldDarcy,CMFE_FIELD_U_VARIABLE_TYPE,CMFE_FIELD_VALUES_SET_TYPE, & 
+  CALL cmfe_Field_ComponentValuesInitialise(MaterialsFieldDarcy,CMFE_FIELD_U_VARIABLE_TYPE,CMFE_FIELD_VALUES_SET_TYPE, &
     & MaterialsFieldUserNumberDarcyPorosity,POROSITY_PARAM_DARCY,Err)
-  CALL cmfe_Field_ComponentValuesInitialise(MaterialsFieldDarcy,CMFE_FIELD_U_VARIABLE_TYPE,CMFE_FIELD_VALUES_SET_TYPE, & 
+  CALL cmfe_Field_ComponentValuesInitialise(MaterialsFieldDarcy,CMFE_FIELD_U_VARIABLE_TYPE,CMFE_FIELD_VALUES_SET_TYPE, &
     & MaterialsFieldUserNumberDarcyPermOverVis,PERM_OVER_VIS_PARAM_DARCY,Err)
   !Create the equations set materials field variables for deformation-dependent material properties
   CALL cmfe_Field_Initialise(MaterialsFieldMatProperties,Err)
-  CALL cmfe_EquationsSet_MaterialsCreateStart(EquationsSetMatProperties,MaterialsFieldUserNumberMatProperties, & 
+  CALL cmfe_EquationsSet_MaterialsCreateStart(EquationsSetMatProperties,MaterialsFieldUserNumberMatProperties, &
     & MaterialsFieldMatProperties,Err)
   !Finish the equations set materials field variables
   CALL cmfe_EquationsSet_MaterialsCreateFinish(EquationsSetMatProperties,Err)
-  CALL cmfe_Field_ComponentValuesInitialise(MaterialsFieldMatProperties,CMFE_FIELD_U_VARIABLE_TYPE,CMFE_FIELD_VALUES_SET_TYPE, & 
+  CALL cmfe_Field_ComponentValuesInitialise(MaterialsFieldMatProperties,CMFE_FIELD_U_VARIABLE_TYPE,CMFE_FIELD_VALUES_SET_TYPE, &
     & MaterialsFieldUserNumberMatPropertiesPorosity,POROSITY_PARAM_MAT_PROPERTIES,Err)
-  CALL cmfe_Field_ComponentValuesInitialise(MaterialsFieldMatProperties,CMFE_FIELD_U_VARIABLE_TYPE,CMFE_FIELD_VALUES_SET_TYPE, & 
+  CALL cmfe_Field_ComponentValuesInitialise(MaterialsFieldMatProperties,CMFE_FIELD_U_VARIABLE_TYPE,CMFE_FIELD_VALUES_SET_TYPE, &
     & MaterialsFieldUserNumberMatPropertiesPermOverVis,PERM_OVER_VIS_PARAM_MAT_PROPERTIES,Err)
 
   !
@@ -703,25 +574,25 @@ PROGRAM DARCYQUASISTATICMATERIALEXAMPLE
   !
 
 !   !INDEPENDENT FIELDS
-! 
+!
 !   !Create the equations set independent field variables for ALE Darcy
 !   CALL cmfe_Field_Initialise(IndependentFieldDarcy,Err)
-!   CALL cmfe_EquationsSet_IndependentCreateStart(EquationsSetDarcy,IndependentFieldUserNumberDarcy, & 
+!   CALL cmfe_EquationsSet_IndependentCreateStart(EquationsSetDarcy,IndependentFieldUserNumberDarcy, &
 !     & IndependentFieldDarcy,Err)
 !   !Set the mesh component to be used by the field components.
 !   DO COMPONENT_NUMBER=1,NUMBER_OF_DIMENSIONS+1
-!     CALL cmfe_Field_ComponentMeshComponentSet(IndependentFieldDarcy,CMFE_FIELD_U_VARIABLE_TYPE,COMPONENT_NUMBER, & 
+!     CALL cmfe_Field_ComponentMeshComponentSet(IndependentFieldDarcy,CMFE_FIELD_U_VARIABLE_TYPE,COMPONENT_NUMBER, &
 !       & MESH_COMPONENT_NUMBER_GEOMETRY,Err)
 !   ENDDO
 !   !Finish the equations set independent field variables
 !   CALL cmfe_EquationsSet_IndependentCreateFinish(EquationsSetDarcy,Err)
 !   !Create the equations set independent field variables for deformation-dependent material properties
 !   CALL cmfe_Field_Initialise(IndependentFieldMatProperties,Err)
-!   CALL cmfe_EquationsSet_IndependentCreateStart(EquationsSetMatProperties,IndependentFieldUserNumberMatProperties, & 
+!   CALL cmfe_EquationsSet_IndependentCreateStart(EquationsSetMatProperties,IndependentFieldUserNumberMatProperties, &
 !     & IndependentFieldMatProperties,Err)
 !   !Set the mesh component to be used by the field components.
 !   DO COMPONENT_NUMBER=1,NUMBER_OF_DIMENSIONS
-!     CALL cmfe_Field_ComponentMeshComponentSet(IndependentFieldMatProperties,CMFE_FIELD_U_VARIABLE_TYPE,COMPONENT_NUMBER, & 
+!     CALL cmfe_Field_ComponentMeshComponentSet(IndependentFieldMatProperties,CMFE_FIELD_U_VARIABLE_TYPE,COMPONENT_NUMBER, &
 !       & MESH_COMPONENT_NUMBER_GEOMETRY,Err)
 !   ENDDO
 !   !Finish the equations set independent field variables
@@ -773,7 +644,7 @@ PROGRAM DARCYQUASISTATICMATERIALEXAMPLE
   !Get the control loop
   CALL cmfe_Problem_ControlLoopGet(Problem,CMFE_CONTROL_LOOP_NODE,ControlLoop,Err)
   !Set the times
-  CALL cmfe_ControlLoop_TimesSet(ControlLoop,LINEAR_SOLVER_DARCY_START_TIME,LINEAR_SOLVER_DARCY_STOP_TIME, & 
+  CALL cmfe_ControlLoop_TimesSet(ControlLoop,LINEAR_SOLVER_DARCY_START_TIME,LINEAR_SOLVER_DARCY_STOP_TIME, &
     & LINEAR_SOLVER_DARCY_TIME_INCREMENT,Err)
   !Set the output timing
   CALL cmfe_ControlLoop_OutputTypeSet(ControlLoop,CMFE_CONTROL_LOOP_PROGRESS_OUTPUT,Err)
@@ -795,7 +666,6 @@ PROGRAM DARCYQUASISTATICMATERIALEXAMPLE
   CALL cmfe_Problem_SolverGet(Problem,CMFE_CONTROL_LOOP_NODE,SolverMatPropertiesUserNumber,LinearSolverMatProperties,Err)
   !Set the output type
   CALL cmfe_Solver_OutputTypeSet(LinearSolverMatProperties,LINEAR_SOLVER_MAT_PROPERTIES_OUTPUT_TYPE,Err)
-!   CALL cmfe_Solver_OutputTypeSet(LinearSolverMatProperties,4,Err)
   !Set the solver settings
   IF(LINEAR_SOLVER_MAT_PROPERTIES_DIRECT_FLAG) THEN
     CALL cmfe_Solver_LinearTypeSet(LinearSolverMatProperties,CMFE_SOLVER_LINEAR_DIRECT_SOLVE_TYPE,Err)
@@ -866,98 +736,8 @@ PROGRAM DARCYQUASISTATICMATERIALEXAMPLE
   !Start the creation of the equations set boundary conditions for Darcy
   CALL cmfe_BoundaryConditions_Initialise(BoundaryConditionsDarcy,Err)
   CALL cmfe_SolverEquations_BoundaryConditionsCreateStart(SolverEquationsDarcy,BoundaryConditionsDarcy,Err)
-
-  !--- BCs on normal velocity only
-  CONDITION = CMFE_BOUNDARY_CONDITION_MOVED_WALL
-
-  IF( CM%D==2_CMISSIntg ) THEN
-    DO NODE_NUMBER=1_CMISSIntg,NUMBER_OF_NODES_GEOMETRY
-      COORD_X = CM%N(NODE_NUMBER,1_CMISSIntg)
-      COORD_Y = CM%N(NODE_NUMBER,2_CMISSIntg)
-      CALL cmfe_Decomposition_NodeDomainGet(Decomposition,NODE_NUMBER,MESH_COMPONENT_NUMBER_VELOCITY,NodeDomain,Err)
-
-      IF( (ABS(COORD_X-DOMAIN_X1) < GEOMETRY_TOLERANCE) .AND. ComputationalNodeNumber==NodeDomain ) THEN
-        !x-velocity
-        VALUE = 1.0_CMISSRP
-        CALL cmfe_BoundaryConditions_SetNode(BoundaryConditionsDarcy,DependentFieldDarcy,CMFE_FIELD_U_VARIABLE_TYPE, &
-          & CMFE_NO_GLOBAL_DERIV,1,NODE_NUMBER,1_CMISSIntg,CONDITION,VALUE,Err)
-      END IF
-      !
-      IF( (ABS(COORD_X-DOMAIN_X2) < GEOMETRY_TOLERANCE) .AND. ComputationalNodeNumber==NodeDomain ) THEN
-        !x-velocity
-        VALUE = 1.0_CMISSRP
-        CALL cmfe_BoundaryConditions_SetNode(BoundaryConditionsDarcy,DependentFieldDarcy,CMFE_FIELD_U_VARIABLE_TYPE, &
-          & CMFE_NO_GLOBAL_DERIV,1,NODE_NUMBER,1_CMISSIntg,CONDITION,VALUE,Err)
-      END IF
-      !
-      IF( (ABS(COORD_Y-DOMAIN_Y1) < GEOMETRY_TOLERANCE) .AND. ComputationalNodeNumber==NodeDomain ) THEN
-        !y-velocity
-        VALUE = 2.0_CMISSRP
-        CALL cmfe_BoundaryConditions_SetNode(BoundaryConditionsDarcy,DependentFieldDarcy,CMFE_FIELD_U_VARIABLE_TYPE, &
-          & CMFE_NO_GLOBAL_DERIV,1,NODE_NUMBER,2_CMISSIntg,CONDITION,VALUE,Err)
-      END IF
-      !
-      IF( (ABS(COORD_Y-DOMAIN_Y2) < GEOMETRY_TOLERANCE) .AND. ComputationalNodeNumber==NodeDomain ) THEN
-        !y-velocity
-        VALUE = 2.0_CMISSRP
-        CALL cmfe_BoundaryConditions_SetNode(BoundaryConditionsDarcy,DependentFieldDarcy,CMFE_FIELD_U_VARIABLE_TYPE, &
-          & CMFE_NO_GLOBAL_DERIV,1,NODE_NUMBER,2_CMISSIntg,CONDITION,VALUE,Err)
-      END IF
-    END DO
-  ELSE IF( CM%D==3_CMISSIntg ) THEN
-    DO NODE_NUMBER=1_CMISSIntg,NUMBER_OF_NODES_GEOMETRY
-      COORD_X = CM%N(NODE_NUMBER,1_CMISSIntg)
-      COORD_Y = CM%N(NODE_NUMBER,2_CMISSIntg)
-      COORD_Z = CM%N(NODE_NUMBER,3_CMISSIntg)
-      CALL cmfe_Decomposition_NodeDomainGet(Decomposition,NODE_NUMBER,MESH_COMPONENT_NUMBER_VELOCITY,NodeDomain,Err)
-
-      IF( (ABS(COORD_X-DOMAIN_X1) < GEOMETRY_TOLERANCE) .AND. ComputationalNodeNumber==NodeDomain ) THEN
-        !x-velocity
-        VALUE = 1.0_CMISSRP
-        CALL cmfe_BoundaryConditions_SetNode(BoundaryConditionsDarcy,DependentFieldDarcy,CMFE_FIELD_U_VARIABLE_TYPE, &
-          & CMFE_NO_GLOBAL_DERIV,1,NODE_NUMBER,1_CMISSIntg,CONDITION,VALUE,Err)
-      END IF
-      !
-      IF( (ABS(COORD_X-DOMAIN_X2) < GEOMETRY_TOLERANCE) .AND. ComputationalNodeNumber==NodeDomain ) THEN
-        !x-velocity
-        VALUE = 1.0_CMISSRP
-        CALL cmfe_BoundaryConditions_SetNode(BoundaryConditionsDarcy,DependentFieldDarcy,CMFE_FIELD_U_VARIABLE_TYPE, &
-          & CMFE_NO_GLOBAL_DERIV,1,NODE_NUMBER,1_CMISSIntg,CONDITION,VALUE,Err)
-      END IF
-      !
-      IF( (ABS(COORD_Y-DOMAIN_Y1) < GEOMETRY_TOLERANCE) .AND. ComputationalNodeNumber==NodeDomain ) THEN
-        !y-velocity
-        VALUE = 1.0_CMISSRP
-        CALL cmfe_BoundaryConditions_SetNode(BoundaryConditionsDarcy,DependentFieldDarcy,CMFE_FIELD_U_VARIABLE_TYPE, &
-          & CMFE_NO_GLOBAL_DERIV,1,NODE_NUMBER,2_CMISSIntg,CONDITION,VALUE,Err)
-      END IF
-      !
-      IF( (ABS(COORD_Y-DOMAIN_Y2) < GEOMETRY_TOLERANCE) .AND. ComputationalNodeNumber==NodeDomain ) THEN
-        !y-velocity
-        VALUE = 1.0_CMISSRP
-        CALL cmfe_BoundaryConditions_SetNode(BoundaryConditionsDarcy,DependentFieldDarcy,CMFE_FIELD_U_VARIABLE_TYPE, &
-          & CMFE_NO_GLOBAL_DERIV,1,NODE_NUMBER,2_CMISSIntg,CONDITION,VALUE,Err)
-      END IF
-      !
-      IF( (ABS(COORD_Z-DOMAIN_Z1) < GEOMETRY_TOLERANCE) .AND. ComputationalNodeNumber==NodeDomain ) THEN
-        !z-velocity
-        VALUE = 1.0_CMISSRP
-        CALL cmfe_BoundaryConditions_SetNode(BoundaryConditionsDarcy,DependentFieldDarcy,CMFE_FIELD_U_VARIABLE_TYPE, &
-          & CMFE_NO_GLOBAL_DERIV,1,NODE_NUMBER,3_CMISSIntg,CONDITION,VALUE,Err)
-      END IF
-      !
-      IF( (ABS(COORD_Z-DOMAIN_Z2) < GEOMETRY_TOLERANCE) .AND. ComputationalNodeNumber==NodeDomain ) THEN
-        !z-velocity
-        VALUE = 1.0_CMISSRP
-        CALL cmfe_BoundaryConditions_SetNode(BoundaryConditionsDarcy,DependentFieldDarcy,CMFE_FIELD_U_VARIABLE_TYPE, &
-          & CMFE_NO_GLOBAL_DERIV,1,NODE_NUMBER,3_CMISSIntg,CONDITION,VALUE,Err)
-      END IF
-    END DO
-  END IF
-
   !Finish the creation of the equations set boundary conditions for Darcy
   CALL cmfe_SolverEquations_BoundaryConditionsCreateFinish(SolverEquationsDarcy,Err)
-  !
   !Start the creation of the equations set boundary conditions for deformation-dependent material properties
   CALL cmfe_BoundaryConditions_Initialise(BoundaryConditionsMatProperties,Err)
   CALL cmfe_SolverEquations_BoundaryConditionsCreateStart(SolverEquationsMatProperties,BoundaryConditionsMatProperties,Err)
@@ -998,9 +778,7 @@ PROGRAM DARCYQUASISTATICMATERIALEXAMPLE
 
   !Finialise CMISS
   CALL cmfe_Finalise(Err)
-
   WRITE(*,'(A)') "Program successfully completed."
-  
   STOP
 
 END PROGRAM DARCYQUASISTATICMATERIALEXAMPLE
