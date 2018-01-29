@@ -1,4 +1,4 @@
-PROGRAM DARCYQUASISTATICMATERIALEXAMPLE
+PROGRAM darcy_quasistatic
 
   !PROGRAM LIBRARIES
 
@@ -173,7 +173,7 @@ PROGRAM DARCYQUASISTATICMATERIALEXAMPLE
 
   !Generic CMISS variables
 
-  INTEGER(CMISSIntg) :: EquationsSetIndex
+  INTEGER(CMISSIntg) :: EquationsSetIndex,i
   INTEGER(CMISSIntg) :: Err
 
 
@@ -197,9 +197,9 @@ PROGRAM DARCYQUASISTATICMATERIALEXAMPLE
   !
 
   !PROBLEM CONTROL PANEL
-  NUMBER_GLOBAL_X_ELEMENTS=1
+  NUMBER_GLOBAL_X_ELEMENTS=3
   NUMBER_GLOBAL_Y_ELEMENTS=3
-  NUMBER_GLOBAL_Z_ELEMENTS=1
+  NUMBER_GLOBAL_Z_ELEMENTS=3
   NUMBER_OF_DIMENSIONS=3
   BASIS_TYPE=CMFE_BASIS_LINEAR_LAGRANGE_INTERPOLATION
   BASIS_XI_INTERPOLATION_GEOMETRY=CMFE_BASIS_LINEAR_LAGRANGE_INTERPOLATION
@@ -305,6 +305,7 @@ PROGRAM DARCYQUASISTATICMATERIALEXAMPLE
   !Start the creation of a new region
   CALL cmfe_Region_Initialise(Region,Err)
   CALL cmfe_Region_CreateStart(RegionUserNumber,WorldRegion,Region,Err)
+  CALL cmfe_Region_LabelSet(Region,"DarcyRegion",Err)
   !Set the regions coordinate system as defined above
   CALL cmfe_Region_CoordinateSystemSet(Region,CoordinateSystem,Err)
   !Finish the creation of the region
@@ -334,6 +335,7 @@ PROGRAM DARCYQUASISTATICMATERIALEXAMPLE
     CALL cmfe_Basis_QuadratureNumberOfGaussXiSet(BasisGeometry,[BASIS_XI_GAUSS_GEOMETRY,BASIS_XI_GAUSS_GEOMETRY, &
       & BASIS_XI_GAUSS_GEOMETRY],Err)
   ENDIF
+  CALL cmfe_Basis_QuadratureLocalFaceGaussEvaluateSet(BasisGeometry,.true.,Err)
   !Finish the creation of the basis
   CALL cmfe_Basis_CreateFinish(BasisGeometry,Err)
   !
@@ -360,6 +362,7 @@ PROGRAM DARCYQUASISTATICMATERIALEXAMPLE
       CALL cmfe_Basis_QuadratureNumberOfGaussXiSet(BasisVelocity,[BASIS_XI_GAUSS_VELOCITY,BASIS_XI_GAUSS_VELOCITY, &
         & BASIS_XI_GAUSS_VELOCITY],Err)
     ENDIF
+    CALL cmfe_Basis_QuadratureLocalFaceGaussEvaluateSet(BasisVelocity,.true.,Err)
     !Finish the creation of the basis
     CALL cmfe_Basis_CreateFinish(BasisVelocity,Err)
   ENDIF
@@ -389,6 +392,7 @@ PROGRAM DARCYQUASISTATICMATERIALEXAMPLE
       CALL cmfe_Basis_QuadratureNumberOfGaussXiSet(BasisPressure,[BASIS_XI_GAUSS_PRESSURE,BASIS_XI_GAUSS_PRESSURE, &
         & BASIS_XI_GAUSS_PRESSURE],Err)
     ENDIF
+    CALL cmfe_Basis_QuadratureLocalFaceGaussEvaluateSet(BasisPressure,.true.,Err)
     !Finish the creation of the basis
     CALL cmfe_Basis_CreateFinish(BasisPressure,Err)
   ENDIF
@@ -462,7 +466,8 @@ PROGRAM DARCYQUASISTATICMATERIALEXAMPLE
 !  ENDDO
   CALL cmfe_Field_ParameterSetUpdateStart(GeometricField,CMFE_FIELD_U_VARIABLE_TYPE,CMFE_FIELD_VALUES_SET_TYPE,Err)
   CALL cmfe_Field_ParameterSetUpdateFinish(GeometricField,CMFE_FIELD_U_VARIABLE_TYPE,CMFE_FIELD_VALUES_SET_TYPE,Err)
-
+  !Update the geometric field parameters
+  CALL cmfe_GeneratedMesh_GeometricParametersCalculate(GeneratedMesh,GeometricField,Err)
   !
   !================================================================================================================================
   !
@@ -736,6 +741,47 @@ PROGRAM DARCYQUASISTATICMATERIALEXAMPLE
   !Start the creation of the equations set boundary conditions for Darcy
   CALL cmfe_BoundaryConditions_Initialise(BoundaryConditionsDarcy,Err)
   CALL cmfe_SolverEquations_BoundaryConditionsCreateStart(SolverEquationsDarcy,BoundaryConditionsDarcy,Err)
+
+  CALL cmfe_BoundaryConditions_SetNode(BoundaryConditionsDarcy,DependentFieldDarcy,CMFE_FIELD_U_VARIABLE_TYPE,1,1, &
+    & 1,3,CMFE_BOUNDARY_CONDITION_FIXED,1.0_CMISSRP,Err)
+  CALL cmfe_BoundaryConditions_SetNode(BoundaryConditionsDarcy,DependentFieldDarcy,CMFE_FIELD_U_VARIABLE_TYPE,1,1, &
+    & 2,3,CMFE_BOUNDARY_CONDITION_FIXED,1.0_CMISSRP,Err)
+  CALL cmfe_BoundaryConditions_SetNode(BoundaryConditionsDarcy,DependentFieldDarcy,CMFE_FIELD_U_VARIABLE_TYPE,1,1, &
+    & 3,3,CMFE_BOUNDARY_CONDITION_FIXED,1.0_CMISSRP,Err)
+  CALL cmfe_BoundaryConditions_SetNode(BoundaryConditionsDarcy,DependentFieldDarcy,CMFE_FIELD_U_VARIABLE_TYPE,1,1, &
+    & 4,3,CMFE_BOUNDARY_CONDITION_FIXED,1.0_CMISSRP,Err)
+  CALL cmfe_BoundaryConditions_SetNode(BoundaryConditionsDarcy,DependentFieldDarcy,CMFE_FIELD_U_VARIABLE_TYPE,1,1, &
+    & 5,3,CMFE_BOUNDARY_CONDITION_FIXED,1.0_CMISSRP,Err)
+  CALL cmfe_BoundaryConditions_SetNode(BoundaryConditionsDarcy,DependentFieldDarcy,CMFE_FIELD_U_VARIABLE_TYPE,1,1, &
+    & 6,3,CMFE_BOUNDARY_CONDITION_FIXED,1.0_CMISSRP,Err)
+  CALL cmfe_BoundaryConditions_SetNode(BoundaryConditionsDarcy,DependentFieldDarcy,CMFE_FIELD_U_VARIABLE_TYPE,1,1, &
+    & 7,3,CMFE_BOUNDARY_CONDITION_FIXED,1.0_CMISSRP,Err)
+  CALL cmfe_BoundaryConditions_SetNode(BoundaryConditionsDarcy,DependentFieldDarcy,CMFE_FIELD_U_VARIABLE_TYPE,1,1, &
+    & 8,3,CMFE_BOUNDARY_CONDITION_FIXED,1.0_CMISSRP,Err)
+  CALL cmfe_BoundaryConditions_SetNode(BoundaryConditionsDarcy,DependentFieldDarcy,CMFE_FIELD_U_VARIABLE_TYPE,1,1, &
+    & 9,3,CMFE_BOUNDARY_CONDITION_FIXED,1.0_CMISSRP,Err)
+  CALL cmfe_BoundaryConditions_SetNode(BoundaryConditionsDarcy,DependentFieldDarcy,CMFE_FIELD_U_VARIABLE_TYPE,1,1, &
+    & 10,3,CMFE_BOUNDARY_CONDITION_FIXED,1.0_CMISSRP,Err)
+  CALL cmfe_BoundaryConditions_SetNode(BoundaryConditionsDarcy,DependentFieldDarcy,CMFE_FIELD_U_VARIABLE_TYPE,1,1, &
+    & 11,3,CMFE_BOUNDARY_CONDITION_FIXED,1.0_CMISSRP,Err)
+  CALL cmfe_BoundaryConditions_SetNode(BoundaryConditionsDarcy,DependentFieldDarcy,CMFE_FIELD_U_VARIABLE_TYPE,1,1, &
+    & 12,3,CMFE_BOUNDARY_CONDITION_FIXED,1.0_CMISSRP,Err)
+  CALL cmfe_BoundaryConditions_SetNode(BoundaryConditionsDarcy,DependentFieldDarcy,CMFE_FIELD_U_VARIABLE_TYPE,1,1, &
+    & 13,3,CMFE_BOUNDARY_CONDITION_FIXED,1.0_CMISSRP,Err)
+  CALL cmfe_BoundaryConditions_SetNode(BoundaryConditionsDarcy,DependentFieldDarcy,CMFE_FIELD_U_VARIABLE_TYPE,1,1, &
+    & 14,3,CMFE_BOUNDARY_CONDITION_FIXED,1.0_CMISSRP,Err)
+  CALL cmfe_BoundaryConditions_SetNode(BoundaryConditionsDarcy,DependentFieldDarcy,CMFE_FIELD_U_VARIABLE_TYPE,1,1, &
+    & 15,3,CMFE_BOUNDARY_CONDITION_FIXED,1.0_CMISSRP,Err)
+  CALL cmfe_BoundaryConditions_SetNode(BoundaryConditionsDarcy,DependentFieldDarcy,CMFE_FIELD_U_VARIABLE_TYPE,1,1, &
+    & 16,3,CMFE_BOUNDARY_CONDITION_FIXED,1.0_CMISSRP,Err)
+
+  DO i=1,64
+    CALL cmfe_BoundaryConditions_SetNode(BoundaryConditionsDarcy,DependentFieldDarcy,CMFE_FIELD_U_VARIABLE_TYPE,1,1, &
+      & i,1,CMFE_BOUNDARY_CONDITION_FIXED,0.0_CMISSRP,Err)
+    CALL cmfe_BoundaryConditions_SetNode(BoundaryConditionsDarcy,DependentFieldDarcy,CMFE_FIELD_U_VARIABLE_TYPE,1,1, &
+      & i,2,CMFE_BOUNDARY_CONDITION_FIXED,0.0_CMISSRP,Err)
+  END DO
+
   !Finish the creation of the equations set boundary conditions for Darcy
   CALL cmfe_SolverEquations_BoundaryConditionsCreateFinish(SolverEquationsDarcy,Err)
   !Start the creation of the equations set boundary conditions for deformation-dependent material properties
@@ -748,11 +794,6 @@ PROGRAM DARCYQUASISTATICMATERIALEXAMPLE
   !
   !================================================================================================================================
   !
-
-  !RUN SOLVERS
-
-  !Turn of PETSc error handling
-  !CALL PETSC_ERRORHANDLING_SET_ON(ERR,ERROR,*999)
 
   !Solve the problem
   WRITE(*,'(A)') "Solving problem..."
@@ -770,8 +811,8 @@ PROGRAM DARCYQUASISTATICMATERIALEXAMPLE
     WRITE(*,'(A)') "Exporting fields..."
     CALL cmfe_Fields_Initialise(Fields,Err)
     CALL cmfe_Fields_Create(Region,Fields,Err)
-    CALL cmfe_Fields_NodesExport(Fields,"DarcyQuasistaticMaterial","FORTRAN",Err)
-    CALL cmfe_Fields_ElementsExport(Fields,"DarcyQuasistaticMaterial","FORTRAN",Err)
+    CALL cmfe_Fields_NodesExport(Fields,"darcy_quasi","FORTRAN",Err)
+    CALL cmfe_Fields_ElementsExport(Fields,"darcy_quasi","FORTRAN",Err)
     CALL cmfe_Fields_Finalise(Fields,Err)
     WRITE(*,'(A)') "Field exported!"
   ENDIF
@@ -781,4 +822,4 @@ PROGRAM DARCYQUASISTATICMATERIALEXAMPLE
   WRITE(*,'(A)') "Program successfully completed."
   STOP
 
-END PROGRAM DARCYQUASISTATICMATERIALEXAMPLE
+END PROGRAM darcy_quasistatic
